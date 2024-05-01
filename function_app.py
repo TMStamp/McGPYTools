@@ -7,7 +7,6 @@ import logging
 import re
 import base64
 import markdown
-import chardet
 
 ACCEPTED_ENCODINGS = ['utf-8-sig', 'utf-8', 'windows-1252', 'iso-8859-1']
 PARAMS_SOURCE = "source"
@@ -23,15 +22,16 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 # ------------------------------------------------------------------------------------------
 #  Decode string
 # ------------------------------------------------------------------------------------------
-def validate_encoding(input_string):
+def decode(input_string):
     encodings = ['utf-8-sig', 'utf-8', 'windows-1252', 'iso-8859-1']
     for encoding in encodings:
         try:
-            input_string.encode().decode(encoding)
-            return True
+            result = input_string.encode().decode(encoding)
+            return result
         except UnicodeDecodeError:
             continue
-    return False
+    
+    raise UnicodeDecodeError
 
 
 # ------------------------------------------------------------------------------------------
@@ -46,11 +46,11 @@ def tools(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         # Read the contents of the README.md file
-        with open(readme_path, "r") as readme_file:
-            readme_content = markdown.markdown(readme_file.read())
+        readme_file = open(readme_path, "r")
+        readme_content = markdown.markdown(readme_file.read())
 
         # Return the contents as an HttpResponse
-        return func.HttpResponse(readme_content, status_code=200, mimetype="text/plain")
+        return func.HttpResponse(readme_file.read(), status_code=200, mimetype="text/plain")
     except Exception as e:
         return func.HttpResponse('Unable to return API information', status_code=400, mimetype="text/plain")
 
@@ -114,10 +114,11 @@ def findText(req: func.HttpRequest) -> func.HttpResponse:
         pass
 
     # Decode strings received
-    chardet.detect(source)
-
-    contents = []
-    contents = source.splitlines()
+    try:
+        source = decode(source)
+        search_expr = decode(search_expr)
+    except UnicodeDecodeError:
+        return func.HttpResponse(f'Only the following character encoding types are supported: {str(ACCEPTED_ENCODINGS)}',status_code=400)
 
     try:
         return func.httpResponse(search(source.splitlines(), search_expr, ignore_case, use_regex), status_code=200)
